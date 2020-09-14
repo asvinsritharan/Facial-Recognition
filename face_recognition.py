@@ -4,11 +4,13 @@ import dlib
 import os
 import logging
 import matplotlib.pyplot as plt
+from scipy.io import loadmat
+from tkinter import Tk
+from tkinter.filedialog import askdirectory
 
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.decomposition import PCA
-
 
 def get_greypic(image):
     '''(String) -> image
@@ -19,7 +21,7 @@ def get_greypic(image):
     # convert the image from a colour image to a grey scaled image
     grey_image = cv2.imread(image, 0)
     # check if valid image is given to function
-    if grey_image.size != 0:
+    if grey_image.size != None:
         # return the greyscale image
         return grey_image
     # else return None
@@ -36,11 +38,13 @@ def get_face(image):
     grey_image = get_greypic(image)
     if grey_image.size == 0:
         return None, None
+    os.chdir(original_path)
     # this is the opencv face detector, the input we use is the grey image
     # given by our greyface function
     classifier = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
     # get faces in the image
-    faces = classifier.detectMultiScale(grey_image, minNeighbors=15)
+    faces = classifier.detectMultiScale(grey_image, minNeighbors=5)
+    os.chdir(path)
     # if there are no faces in the image then return -1, -1 indicating
     # there are no faces in the picture
     if len(faces) == 0:
@@ -55,7 +59,7 @@ def get_face(image):
     grey_face = grey_image[y:y+h, x:x+w]
     # get the rectangle centre and width and height which contains the face
     # return the grey face and the rectangle
-    return grey_face, rect
+    return grey_face, rect, grey_image
 
 def draw_face_outline(rect, image):
     '''((int, int, int, int), numpy.array) -> img
@@ -82,9 +86,7 @@ def show_face_outline(file):
     Given the string representation of the file name, show the rectangle outlining
     the face in the greyscale version of the image. This function returns None
     '''
-    face_only, rectangle = get_face(file)
-    # get the greyscale version of the image
-    grey_image = get_greypic(file)
+    face_only, rectangle, grey_image = get_face(file)
     # outline the face with a rectangle
     faceoutline = draw_face_outline(rectangle, grey_image)
     # show the greyscale outlined image
@@ -98,6 +100,8 @@ def show_image(image):
     None, show the user the image given to the show_image function
     '''
     # open the image
+    cv2.namedWindow('image', cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('image', 300,300)
     cv2.imshow('image', image)
     print("press any key to continue")
     cv2.waitKey(0)
@@ -126,6 +130,7 @@ def get_faces(directory):
     '''
     # get images from directory
     images = get_images(directory)
+    print(images)
     # create empty lists
     detected_faces = []
     min_height = []
@@ -269,12 +274,74 @@ def eigenfaces(directory, labels):
     # get predictions and labels
     return predictions, test_labels
 
+def getPerson(directory, labels, testDir):
+    # get the detected faces
+    detected_faces, min_height, min_width = get_faces(directory)  
+    # set the cwd as the folder of the test picture
+    os.chdir(testDir)
+    #get the face from the supplied image
+    detected_face, height, width = get_faces(testDir)
+    # if height or width of the test image is smaller than the training images set the min_height
+    # and min_width as that of the test image
+    if height < min_height:
+        min_height = height
+    if width < min_width:
+        min_width = width
+    # resize the train faces
+    resized_faces, num_faces, height, width = resize_faces(detected_faces, min_height, min_width)
+    # createLabels function can be used to create your own labels for your dataset if no labels are
+    # given
+    if labels==None:
+        labels = createLabels(resized_faces)  
+    # resize the test image to match the dimensions of the smallest training image
+    resized_face, num_face, h, w = resize_faces(detected_face, min_height, min_width)
+    # get the PCA matrix for the training images
+    PCAMatrix = getPCAMatrix(resized_faces, num_faces, height, width)
+    # get the PCA matrix for the test image
+    PCAMatrixtest = getPCAMatrix(resized_face, 1, height, width)
+    # Get the PCA matrix for the training data and their corresponding labels
+    # test size is set to 0.1 because that is the minimum value we can set to get the ordered labels
+    # corresponding to the PCA matrix    
+    train_x, test_x, train_labels, test_labels = train_test_split(PCAMatrix, labels, test_size = 0.1)  
+    # we don't have many pictures so we will set the number of components in PCA to 4
+    components = 4
+    # create a PCA model with 4 components
+    pca = PCA(components)
+    # fit the PCA Model with the training data
+    pca.fit(PCAMatrix)
+    # get components for each training face
+    train_x_PCA = pca.transform(train_x)    
+    # get components for the test face
+    test_x_PCA = pca.transform(PCAMatrixtest)
+    # initialize the classifier
+    classifier = MLPClassifier(hidden_layer_sizes=(1024))
+    # fit classifier with labels and PCA components for training data
+    classifier.fit(train_x_PCA, train_labels)
+    # get predictions for test picture
+    predictions = classifier.predict(test_x_PCA)    
+    # give the prediction for the person in the test image
+    return predictions   
+    
+    
+    
+
 if __name__ == "__main__":
+    # Get the folder containing training images
+    path = askdirectory(title='Select Folder Containing Training Images')
+    # get the original path of the directory containing the python file
+    original_path = os.getcwd()
+    # set the cwd as that of the folder containing training images
+    os.chdir(path)
+    # get the directory of the test image. THIS MUST BE DIFFERENT THAN THE ONE OF THE TRAINING IMAGES
+    testDir = askdirectory(title='Select Folder Containing Test Image')
     # set labels to None if you want to make your own labels
-    labels = ["The Weeknd", "The Weeknd", "The Weeknd", "Michael Jackson", "The Weeknd", "The Weeknd", "The Weeknd", "Michael Jackson"]
-    directory = "C:/Users/Asvin/Documents/CS/MJ" # replace directory with directory of photos
-    predictions, true_labels = eigenfaces(directory, labels)
+    labels = None
+    
+    #### UN COMMENT TO GET 20% TESTING DATA PREDICATIONS
+    #predictions, true_labels = eigenfaces(path, labels)
+    
+    #get the name of the person who you want to predict
+    predictions = getPerson(path, labels, testDir)
+    # print the name of the person you want to predict
     print("Here are my predictions")
     print(predictions)
-    print("Here are your labels")
-    print(true_labels)
