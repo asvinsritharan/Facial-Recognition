@@ -43,7 +43,7 @@ def get_face(image):
     # given by our greyface function
     classifier = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
     # get faces in the image
-    faces = classifier.detectMultiScale(grey_image, minNeighbors=5)
+    faces = classifier.detectMultiScale(grey_image, minNeighbors=15)
     os.chdir(path)
     # if there are no faces in the image then return -1, -1 indicating
     # there are no faces in the picture
@@ -99,7 +99,7 @@ def show_image(image):
     Given a string representation of a directory which contains an image return
     None, show the user the image given to the show_image function
     '''
-    # open the image
+    # open the image and resize it to be in a 300x300 window
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('image', 300,300)
     cv2.imshow('image', image)
@@ -130,7 +130,6 @@ def get_faces(directory):
     '''
     # get images from directory
     images = get_images(directory)
-    print(images)
     # create empty lists
     detected_faces = []
     min_height = []
@@ -256,7 +255,7 @@ def eigenfaces(directory, labels):
     # create training and test sets and labels. 20% of the data will be the test data
     train_x, test_x, train_labels, test_labels = train_test_split(PCAMatrix, labels, test_size = 0.2)
     # we don't have many pictures so we will set the number of components in PCA to 4
-    components = 4
+    components = 10
     # create a PCA model with 4 components
     pca = PCA(components)
     # fit the PCA Model with the training data
@@ -275,6 +274,11 @@ def eigenfaces(directory, labels):
     return predictions, test_labels
 
 def getPerson(directory, labels, testDir):
+    '''(String, [String], String) -> [String]
+    Given a directory for the training data, [an optional list of labels for training data], and the
+    directory for the image which needs identification, return the name of the person in the picture
+    which requires identification.
+    '''
     # get the detected faces
     detected_faces, min_height, min_width = get_faces(directory)  
     # set the cwd as the folder of the test picture
@@ -304,7 +308,7 @@ def getPerson(directory, labels, testDir):
     # corresponding to the PCA matrix    
     train_x, test_x, train_labels, test_labels = train_test_split(PCAMatrix, labels, test_size = 0.1)  
     # we don't have many pictures so we will set the number of components in PCA to 4
-    components = 4
+    components = 12
     # create a PCA model with 4 components
     pca = PCA(components)
     # fit the PCA Model with the training data
@@ -320,12 +324,13 @@ def getPerson(directory, labels, testDir):
     # get predictions for test picture
     predictions = classifier.predict(test_x_PCA)    
     # give the prediction for the person in the test image
-    return predictions   
+    return predictions, resized_face
     
     
     
 
 if __name__ == "__main__":
+    
     # Get the folder containing training images
     path = askdirectory(title='Select Folder Containing Training Images')
     # get the original path of the directory containing the python file
@@ -334,14 +339,20 @@ if __name__ == "__main__":
     os.chdir(path)
     # get the directory of the test image. THIS MUST BE DIFFERENT THAN THE ONE OF THE TRAINING IMAGES
     testDir = askdirectory(title='Select Folder Containing Test Image')
-    # set labels to None if you want to make your own labels
-    labels = None
-    
+    # set labels to a list of names in the order of the pictures asked by the script to speed up labelling process
+    labels = ["The Weeknd", "Michael Jackson", "The Weeknd", "Michael Jackson","The Weeknd", "Michael Jackson","Michael Jackson","Michael Jackson","The Weeknd","The Weeknd","The Weeknd","The Weeknd"]
+    #labels = None
+    Tk().destroy()
     #### UN COMMENT TO GET 20% TESTING DATA PREDICATIONS
     #predictions, true_labels = eigenfaces(path, labels)
     
     #get the name of the person who you want to predict
-    predictions = getPerson(path, labels, testDir)
+    predictions, face = getPerson(path, labels, testDir)
+    plt.ion()
+    plt.figure()
+    plt.imshow(face[0], interpolation='nearest')
+    plt.draw()
     # print the name of the person you want to predict
-    print("Here are my predictions")
-    print(predictions)
+    print("The name of the person in your picture is " + predictions[0])
+    
+    
